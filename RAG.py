@@ -59,6 +59,27 @@ def process_book(pdf_file):
 
 
 # Ask question with correct page validation
+# def ask_question(question, collection, total_pages):
+#     question_embedding = embedder.encode(question)
+#     results = collection.query(query_embeddings=[question_embedding], n_results=5)
+
+#     model = genai.GenerativeModel("gemini-1.5-flash")
+
+#     if not results["documents"] or not results["documents"][0]:
+#         return "❌ This topic is not discussed in the book."
+
+#     context = " ".join(results["documents"][0])
+
+#     # Extract valid book page numbers only
+#     page_citations = sorted(
+#         set(meta["page_num"] for meta in results["metadatas"][0] if 1 <= meta["page_num"] <= total_pages)
+#     )
+
+#     prompt = f"Answer the question using ONLY the following text:\n\n{context}\n\nQuestion: {question}\nAnswer:"
+#     response = model.generate_content(prompt)
+
+#     citation_text = f"\n\n**Source: Pages {', '.join(map(str, page_citations))}**" if page_citations else ""
+#     return response.text + citation_text
 def ask_question(question, collection, total_pages):
     question_embedding = embedder.encode(question)
     results = collection.query(query_embeddings=[question_embedding], n_results=5)
@@ -66,20 +87,35 @@ def ask_question(question, collection, total_pages):
     model = genai.GenerativeModel("gemini-1.5-flash")
 
     if not results["documents"] or not results["documents"][0]:
-        return "❌ This topic is not discussed in the book."
+        prompt = f"Question: {question}\nPolitely tell the user that this topic is not discussed in the book."
+        try:
+            response = model.generate_content(prompt)
+            return response.text
+        except Exception as e:
+            if "ResourceExhausted" in str(e):
+                return "⚠️ API quota exceeded. Please try again tomorrow."
+            else:
+                return f"❌ An error occurred: {str(e)}"
 
     context = " ".join(results["documents"][0])
 
-    # Extract valid book page numbers only
     page_citations = sorted(
         set(meta["page_num"] for meta in results["metadatas"][0] if 1 <= meta["page_num"] <= total_pages)
     )
 
     prompt = f"Answer the question using ONLY the following text:\n\n{context}\n\nQuestion: {question}\nAnswer:"
-    response = model.generate_content(prompt)
+
+    try:
+        response = model.generate_content(prompt)
+    except Exception as e:
+        if "ResourceExhausted" in str(e):
+            return "⚠️ API quota exceeded. Please try again tomorrow."
+        else:
+            return f"❌ An error occurred: {str(e)}"
 
     citation_text = f"\n\n**Source: Pages {', '.join(map(str, page_citations))}**" if page_citations else ""
     return response.text + citation_text
+
 
 
 # Streamlit UI
