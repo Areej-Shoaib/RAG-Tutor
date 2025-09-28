@@ -11,7 +11,7 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 # Initialize
-embedder = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+embedder = SentenceTransformer('all-MiniLM-L6-v2')
 chroma_client = chromadb.Client()
 
 # Find where "Page 1" or "1" appears in PDF to check page number
@@ -63,7 +63,7 @@ def ask_question(question, collection, total_pages):
     question_embedding = embedder.encode(question)
     results = collection.query(query_embeddings=[question_embedding], n_results=5)
 
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-2.5-flash")
 
     if not results["documents"] or not results["documents"][0]:
         prompt = f"Question: {question}\nPolitely tell the user that this topic is not discussed in the book."
@@ -72,9 +72,9 @@ def ask_question(question, collection, total_pages):
             return response.text
         except Exception as e:
             if "ResourceExhausted" in str(e):
-                return "⚠️ API quota exceeded. Please try again tomorrow."
+                return "API quota exceeded. Please try again tomorrow."
             else:
-                return f"❌ An error occurred: {str(e)}"
+                return f"An error occurred: {str(e)}"
 
     context = " ".join(results["documents"][0])
 
@@ -88,9 +88,9 @@ def ask_question(question, collection, total_pages):
         response = model.generate_content(prompt)
     except Exception as e:
         if "ResourceExhausted" in str(e):
-            return "⚠️ API quota exceeded. Please try again tomorrow."
+            return "API quota exceeded. Please try again tomorrow."
         else:
-            return f"❌ An error occurred: {str(e)}"
+            return f"An error occurred: {str(e)}"
 
     citation_text = f"\n\n**Source: Pages {', '.join(map(str, page_citations))}**" if page_citations else ""
     return response.text + citation_text
