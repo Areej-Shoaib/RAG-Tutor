@@ -41,7 +41,8 @@ def process_book(pdf_file):
         text = page.extract_text()
         if text:
             chunks = [text[i:i+1000] for i in range(0, len(text), 1000)]
-            embeddings = [embedder.encode(chunk) for chunk in chunks]
+            embeddings = embedder.encode(chunks)
+
 
             # Book page = PDF page index - start_page_index + 1
             book_page_num = page_num - start_page_index + 1
@@ -50,11 +51,16 @@ def process_book(pdf_file):
 
             for i, chunk in enumerate(chunks):
                 collection.add(
-                    documents=[chunk],
-                    metadatas=[{"page_num": book_page_num, "total_pages": total_pages}],
-                    ids=[f"{page_num+1}_{i}"],
-                    embeddings=[embeddings[i]]
+                documents=[chunk],
+                metadatas=[{
+                "page_num": page_num + 1,        # actual PDF page index
+                "book_page_num": book_page_num,  # logical book page number (adjusted)
+                "total_pages": total_pages
+                 }],
+                ids=[f"{page_num+1}_{i}"],
+                embeddings=[embeddings[i]]
                 )
+
     return collection, total_pages
 
 
@@ -76,11 +82,23 @@ def ask_question(question, collection, total_pages):
             else:
                 return f"An error occurred: {str(e)}"
 
-    context = " ".join(results["documents"][0])
 
+    
+    # Flatten all metadata and only include those with page numbers
+    all_metas = [m for sublist in results["metadatas"] for m in sublist if "page_num" in m]
+
+    # Collect all unique book pages for citation
     page_citations = sorted(
-        set(meta["page_num"] for meta in results["metadatas"][0] if 1 <= meta["page_num"] <= total_pages)
+        set(meta["book_page_num"] for meta in all_metas if 1 <= meta["book_page_num"] <= total_pages)
     )
+
+    context_parts = []
+    for doc_list, meta_list in zip(results["documents"], results["metadatas"]):
+        for doc, meta in zip(doc_list, meta_list):
+            if "book_page_num" in meta:
+                context_parts.append(f"[Page {meta['book_page_num']}]\n{doc.strip()}")
+
+    context = "\n\n-----\n\n".join(context_parts)
 
     prompt = f"Answer the question using ONLY the following text:\n\n{context}\n\nQuestion: {question}\nAnswer:"
 
@@ -113,10 +131,3 @@ if uploaded_pdf:
         else:
             answer = ask_question(question, collection, total_pages)
             st.markdown(f"**Answer:**\n{answer}")
-
-
-
-
-
-
-
